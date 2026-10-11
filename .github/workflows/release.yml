@@ -38,22 +38,40 @@ jobs:
         with:
           google-services-json-base64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
-      - name: Decode keystore
+      # Signing secrets are per-repository: a fork does not inherit them. Without
+      # them the build still produces an unsigned APK, but publishing that as a
+      # release would be worse than stopping — hence the explicit refusal below.
+      - name: Set up signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
-
-      - name: Create keystore.properties
-        run: |
-          cat > keystore.properties <<'EOF'
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p keystore
+            echo "$KEYSTORE_BASE64" | base64 -d > keystore/release.keystore
+            cat > keystore.properties <<EOF
           storeFile=keystore/release.keystore
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
           EOF
+            echo "has_keystore=true" >> "$GITHUB_ENV"
+            echo "Release build will be signed."
+          else
+            echo "has_keystore=false" >> "$GITHUB_ENV"
+            echo "::warning::KEYSTORE_BASE64 secret is not set — building an UNSIGNED release APK. See RELEASE.md for the required secrets."
+          fi
 
       - name: Build release APK
         run: ./gradlew assembleRelease --stacktrace
+
+      - name: Refuse to publish an unsigned release
+        if: ${{ inputs.create_release && inputs.tag != '' && env.has_keystore != 'true' }}
+        run: |
+          echo "::error::Refusing to create a GitHub Release from an UNSIGNED APK. Add the KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD secrets (see RELEASE.md), then re-run this workflow."
+          exit 1
 
       - name: Check release metadata is in sync
         run: |

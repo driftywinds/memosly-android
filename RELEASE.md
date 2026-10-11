@@ -36,6 +36,34 @@ python3 scripts/check_release_metadata.py
 Release workflow **只在手动触发时运行**（这是刻意的：发布必须来自 CI 全绿的提交，
 而不是碰巧被 push 的 tag）。先确认 CI 通过，再进入下一步。
 
+### 2.5 配置 Actions secrets（每个仓库单独配置，fork 不继承）
+
+Release workflow 依赖以下 secrets（仓库 Settings → Secrets and variables → Actions）：
+
+| Secret | 必需 | 内容 |
+|--------|------|------|
+| `KEYSTORE_BASE64` | ✅（发版必需） | `release.keystore` 文件的 base64 |
+| `KEYSTORE_PASSWORD` | ✅（发版必需） | keystore 密码 |
+| `KEY_ALIAS` | ✅（发版必需） | keystore 里的 key 别名 |
+| `KEY_PASSWORD` | ✅（发版必需） | key 密码 |
+| `GOOGLE_SERVICES_JSON_BASE64` | 建议 | `google-services.json` 的 base64（缺失时 CI 用占位文件，构建能过但 Firebase 不可用） |
+
+生成 base64：
+
+```powershell
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\path\to\release.keystore"))
+```
+
+```bash
+# Linux / macOS（-w0 避免换行）
+base64 -w0 release.keystore
+base64 -w0 google-services.json
+```
+
+> 没有 `KEYSTORE_BASE64` 时 workflow 仍然会构建，但产物是**未签名 APK**，且会拒绝
+> 创建 GitHub Release；artifact 可正常下载用于测试。
+
 ### 3. 触发 Release workflow
 
 ```bash
