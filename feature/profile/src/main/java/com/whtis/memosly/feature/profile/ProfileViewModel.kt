@@ -83,9 +83,9 @@ class ProfileViewModel @Inject constructor(
             try {
                 val user = authRepository.currentUser.value
                 if (user != null) {
-                    val stats = userRepository.getUserStats(user.id)
-                    val tokens = try { userRepository.listAccessTokens(user.id) } catch (_: Exception) { emptyList() }
-                    val webhooks = try { userRepository.listWebhooks(user.id) } catch (_: Exception) { emptyList() }
+                    val stats = userRepository.getUserStats(user.name)
+                    val tokens = try { userRepository.listAccessTokens(user.name) } catch (_: Exception) { emptyList() }
+                    val webhooks = try { userRepository.listWebhooks(user.name) } catch (_: Exception) { emptyList() }
                     val isAdmin = user.role == UserRole.HOST || user.role == UserRole.ADMIN
 
                     var wsProfile: WorkspaceProfile? = null
@@ -121,19 +121,19 @@ class ProfileViewModel @Inject constructor(
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.deleteAccessToken(user.id, token)
-                val tokens = userRepository.listAccessTokens(user.id)
+                userRepository.deleteAccessToken(user.name, token)
+                val tokens = userRepository.listAccessTokens(user.name)
                 _uiState.value = _uiState.value.copy(accessTokens = tokens)
             } catch (_: Exception) {}
         }
     }
 
-    fun deleteWebhook(id: Int) {
+    fun deleteWebhook(webhook: Webhook) {
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.deleteWebhook(id)
-                val webhooks = userRepository.listWebhooks(user.id)
+                userRepository.deleteWebhook(webhook)
+                val webhooks = userRepository.listWebhooks(user.name)
                 _uiState.value = _uiState.value.copy(webhooks = webhooks)
             } catch (_: Exception) {}
         }

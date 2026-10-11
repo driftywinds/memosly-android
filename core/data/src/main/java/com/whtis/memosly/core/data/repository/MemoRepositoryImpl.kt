@@ -74,11 +74,29 @@ class MemoRepositoryImpl @Inject constructor(
     override suspend fun getComments(memoId: String): List<Memo> =
         memoApi.listMemoComments(memoId).memos.map { it.toDomain() }
 
-    override suspend fun createComment(memoId: String, content: String): Memo =
-        memoApi.createMemoComment(
+    override suspend fun createComment(memoId: String, content: String): Memo {
+        // v0.31: comments stopped inheriting the context memo's visibility — an
+        // unspecified one becomes PRIVATE and nobody but the author ever sees it.
+        // Copy the parent's audience and placement so commenting behaves like it
+        // did on older servers.
+        val placement = if (version == ServerVersion.V031) {
+            runCatching { memoApi.getMemo(memoId) }.getOrNull()
+                ?.let { parent -> parent.visibility to parent.space }
+                ?.takeIf { (visibility, _) ->
+                    visibility.isNotBlank() && visibility != "VISIBILITY_UNSPECIFIED"
+                }
+        } else {
+            null
+        }
+        return memoApi.createMemoComment(
             memoId,
-            CreateMemoRequest(content = content),
+            CreateMemoRequest(
+                content = content,
+                visibility = placement?.first,
+                space = placement?.second,
+            ),
         ).toDomain()
+    }
 
     override suspend fun getReactions(memoId: String): List<Reaction> =
         memoApi.listMemoReactions(memoId).reactions.map { it.toDomain() }
@@ -88,7 +106,9 @@ class MemoRepositoryImpl @Inject constructor(
             memoId,
             UpsertReactionRequest(
                 reaction = ReactionFields(
-                    contentId = "memos/$memoId",
+                    // v0.31 dropped content_id from the public API; the memo comes
+                    // from the path now.
+                    contentId = if (version == ServerVersion.V031) null else "memos/$memoId",
                     reactionType = reactionType,
                 ),
             ),
@@ -96,7 +116,7 @@ class MemoRepositoryImpl @Inject constructor(
 
     override suspend fun deleteReaction(reactionId: Int, memoId: String) =
         when (version) {
-            ServerVersion.V026 -> memoApi.deleteMemoReaction(memoId, reactionId)
+            ServerVersion.V026, ServerVersion.V031 -> memoApi.deleteMemoReaction(memoId, reactionId)
             else -> memoApi.deleteReaction(reactionId)
         }
 

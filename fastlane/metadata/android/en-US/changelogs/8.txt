@@ -1,0 +1,7 @@
+v1.3.0 — Works with Memos server v0.31.
+
+Added:
+- Full support for Memos server v0.31: sessions survive the new 15-minute access tokens via automatic refresh, and comments, notifications, access tokens, webhooks and admin info all use the v0.31 API. Pick "v0.31" when logging in.
+- The profile's About section shows which Memos server versions the app supports.
+
+Servers v0.24–v0.26 keep working as before.

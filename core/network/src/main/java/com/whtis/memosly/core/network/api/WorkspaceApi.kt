@@ -1,5 +1,6 @@
 package com.whtis.memosly.core.network.api
 
+import com.whtis.memosly.core.network.dto.InstanceProfileDtoV031
 import com.whtis.memosly.core.network.dto.WorkspaceProfileDto
 import com.whtis.memosly.core.network.dto.WorkspaceSettingDto
 import retrofit2.http.Body
@@ -15,4 +16,8 @@ interface WorkspaceApi {
 
     @PATCH("api/v1/workspace/setting")
     suspend fun updateWorkspaceSetting(@Body setting: WorkspaceSettingDto): WorkspaceSettingDto
+
+    // v0.31: instance profile replaced the workspace profile
+    @GET("api/v1/instance/profile")
+    suspend fun getInstanceProfileV031(): InstanceProfileDtoV031
 }

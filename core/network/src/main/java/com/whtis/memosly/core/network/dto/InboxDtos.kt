@@ -22,3 +22,20 @@ data class ListInboxResponse(
 data class UpdateInboxRequest(
     val status: String,
 )
+
+// --- v0.31 user notifications ---
+// The inboxes service is gone; notifications live under the user resource.
+
+@JsonClass(generateAdapter = true)
+data class UserNotificationDtoV031(
+    val name: String = "",
+    val sender: String? = null,
+    val status: String? = null,
+    val createTime: String? = null,
+    val type: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class ListUserNotificationsResponseV031(
+    val notifications: List<UserNotificationDtoV031> = emptyList(),
+)

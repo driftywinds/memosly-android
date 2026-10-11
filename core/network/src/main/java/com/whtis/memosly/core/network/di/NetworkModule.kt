@@ -3,6 +3,7 @@ package com.whtis.memosly.core.network.di
 import com.whtis.memosly.core.network.AuthInterceptor
 import com.whtis.memosly.core.network.PLACEHOLDER_HOST
 import com.whtis.memosly.core.network.ServerUrlInterceptor
+import com.whtis.memosly.core.network.TokenAuthenticator
 import com.whtis.memosly.core.network.api.*
 import com.whtis.memosly.core.network.dto.MemoRelationAdapter
 import com.squareup.moshi.Moshi
@@ -16,6 +17,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -29,11 +31,25 @@ object NetworkModule {
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
+    /**
+     * Bare client with no memos interceptors or authenticator. Used by [com.whtis.memosly.core.network.TokenRefresher]
+     * so a token refresh can never recurse into the client it is refreshing for.
+     */
+    @Provides
+    @Singleton
+    @Named("plain")
+    fun providePlainOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
     @Provides
     @Singleton
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
         serverUrlInterceptor: ServerUrlInterceptor,
+        tokenAuthenticator: TokenAuthenticator,
     ): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(serverUrlInterceptor)
         .addInterceptor(authInterceptor)
@@ -42,6 +58,7 @@ object NetworkModule {
                 level = HttpLoggingInterceptor.Level.HEADERS
             }
         )
+        .authenticator(tokenAuthenticator)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

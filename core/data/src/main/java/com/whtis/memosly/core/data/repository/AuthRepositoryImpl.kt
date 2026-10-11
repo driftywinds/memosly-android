@@ -2,9 +2,11 @@ package com.whtis.memosly.core.data.repository
 
 import android.util.Log
 import com.whtis.memosly.core.model.User
+import com.whtis.memosly.core.network.MemosCookies
 import com.whtis.memosly.core.network.ServerVersion
 import com.whtis.memosly.core.network.SessionPreferences
 import com.whtis.memosly.core.network.TokenManager
+import com.whtis.memosly.core.network.TokenRefresher
 import com.whtis.memosly.core.network.api.AuthApi
 import com.whtis.memosly.core.network.dto.PasswordCredentials
 import com.whtis.memosly.core.network.dto.SignInRequestBody
@@ -21,6 +23,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val authApi: AuthApi,
     private val tokenManager: TokenManager,
     private val sessionPreferences: SessionPreferences,
+    private val tokenRefresher: TokenRefresher,
 ) : AuthRepository {
 
     private val _isAuthenticated = MutableStateFlow(false)
@@ -46,6 +49,7 @@ class AuthRepositoryImpl @Inject constructor(
             ServerVersion.V024 -> signInV024(username, password)
             ServerVersion.V025 -> signInV025(username, password)
             ServerVersion.V026 -> signInV026(username, password)
+            ServerVersion.V031 -> signInV031(username, password)
         }
 
         sessionPreferences.serverUrl = serverUrl
@@ -118,6 +122,35 @@ class AuthRepositoryImpl @Inject constructor(
         return userDto.toDomain()
     }
 
+    private suspend fun signInV031(username: String, password: String): User {
+        val body = SignInRequestBody(
+            passwordCredentials = PasswordCredentials(username, password),
+        )
+        val response = authApi.signInV031(body)
+        if (!response.isSuccessful) {
+            val errorBody = response.errorBody()?.string() ?: "no body"
+            throw Exception("Sign in failed: ${response.code()} ${response.message()} - $errorBody")
+        }
+
+        val signInResponse = response.body() ?: throw Exception("Empty response body")
+
+        // v0.31: the access token dies in 15 minutes. The 30-day refresh token arrives
+        // as an HttpOnly cookie and is the only thing that can renew the session, so
+        // losing it means signing in again.
+        val refreshToken = MemosCookies.fromResponseHeaders(response.headers())
+            ?: throw Exception("No refresh cookie in response")
+        tokenManager.setRefreshCookie(refreshToken)
+        sessionPreferences.refreshCookie = refreshToken
+
+        val accessToken = signInResponse.accessToken
+            ?: throw Exception("No access token in response")
+        tokenManager.setAccessToken(accessToken)
+        sessionPreferences.accessToken = accessToken
+
+        val userDto = signInResponse.user ?: throw Exception("No user in response")
+        return userDto.toDomain()
+    }
+
     private fun extractCookieValue(headers: okhttp3.Headers, cookieName: String): String? {
         // Try grpc-metadata-set-cookie first, then set-cookie
         for (headerName in listOf("grpc-metadata-set-cookie", "set-cookie")) {
@@ -143,6 +176,10 @@ class AuthRepositoryImpl @Inject constructor(
         // Strip "Bearer " prefix if user pasted it
         val cleanToken = accessToken.trim().removePrefix("Bearer ").trim()
         tokenManager.setAccessToken(cleanToken)
+        // A pasted token is a PAT (never expires on its own); any refresh cookie left
+        // over from an earlier password login belongs to a different session.
+        tokenManager.setRefreshCookie(null)
+        sessionPreferences.refreshCookie = null
 
         try {
             val user = getCurrentUser()
@@ -166,11 +203,14 @@ class AuthRepositoryImpl @Inject constructor(
                 ServerVersion.V024 -> authApi.signOutV024()
                 ServerVersion.V025 -> authApi.signOutV025()
                 ServerVersion.V026 -> authApi.signOutV026()
+                // Same endpoint as v0.26; the server also revokes the refresh token.
+                ServerVersion.V031 -> authApi.signOutV026()
             }
         } catch (_: Exception) {
             // Ignore signout API errors
         }
         tokenManager.clear()
+        tokenManager.setRefreshCookie(null)
         sessionPreferences.clear()
         _isAuthenticated.value = false
         _currentUser.value = null
@@ -184,6 +224,7 @@ class AuthRepositoryImpl @Inject constructor(
         tokenManager.setServerUrl(serverUrl)
         tokenManager.setAccessToken(accessToken)
         tokenManager.setServerVersion(version)
+        tokenManager.setRefreshCookie(sessionPreferences.refreshCookie)
 
         return try {
             val user = getCurrentUser()
@@ -192,9 +233,27 @@ class AuthRepositoryImpl @Inject constructor(
             true
         } catch (e: HttpException) {
             if (e.code() in listOf(401, 403)) {
+                // v0.31 access tokens live 15 minutes, so hitting restore with an
+                // expired-but-renewable token is routine. Renew it before deciding
+                // the session is dead — clearing it here would log the user out
+                // every time the app was backgrounded past the expiry.
+                if (version == ServerVersion.V031 &&
+                    sessionPreferences.refreshCookie != null &&
+                    tokenRefresher.refresh()
+                ) {
+                    try {
+                        val user = getCurrentUser()
+                        _isAuthenticated.value = true
+                        _currentUser.value = user
+                        return true
+                    } catch (_: Exception) {
+                        // Refresh worked but the retry failed — fall through and clear.
+                    }
+                }
                 // Token is genuinely invalid — clear everything
                 Log.w(TAG, "restoreSession: auth failed (${e.code()}), clearing session")
                 tokenManager.clear()
+                tokenManager.setRefreshCookie(null)
                 sessionPreferences.clear()
                 false
             } else {
@@ -223,6 +282,10 @@ class AuthRepositoryImpl @Inject constructor(
                 resp.user ?: throw Exception("No user in response")
             }
             ServerVersion.V026 -> {
+                val resp = authApi.getCurrentUserV026()
+                resp.user ?: throw Exception("No user in response")
+            }
+            ServerVersion.V031 -> {
                 val resp = authApi.getCurrentUserV026()
                 resp.user ?: throw Exception("No user in response")
             }

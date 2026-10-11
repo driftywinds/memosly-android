@@ -41,8 +41,8 @@ class SettingsViewModel @Inject constructor(
             try {
                 val user = authRepository.currentUser.value
                 if (user != null) {
-                    val tokens = userRepository.listAccessTokens(user.id)
-                    val webhooks = userRepository.listWebhooks(user.id)
+                    val tokens = userRepository.listAccessTokens(user.name)
+                    val webhooks = userRepository.listWebhooks(user.name)
                     _uiState.value = SettingsUiState(
                         user = user,
                         accessTokens = tokens,
@@ -62,8 +62,8 @@ class SettingsViewModel @Inject constructor(
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.createAccessToken(user.id, description, null)
-                val tokens = userRepository.listAccessTokens(user.id)
+                userRepository.createAccessToken(user.name, description, null)
+                val tokens = userRepository.listAccessTokens(user.name)
                 _uiState.value = _uiState.value.copy(accessTokens = tokens)
             } catch (_: Exception) {}
         }
@@ -73,8 +73,8 @@ class SettingsViewModel @Inject constructor(
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.deleteAccessToken(user.id, token)
-                val tokens = userRepository.listAccessTokens(user.id)
+                userRepository.deleteAccessToken(user.name, token)
+                val tokens = userRepository.listAccessTokens(user.name)
                 _uiState.value = _uiState.value.copy(accessTokens = tokens)
             } catch (_: Exception) {}
         }
@@ -84,19 +84,19 @@ class SettingsViewModel @Inject constructor(
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.createWebhook(name, url)
-                val webhooks = userRepository.listWebhooks(user.id)
+                userRepository.createWebhook(user.name, name, url)
+                val webhooks = userRepository.listWebhooks(user.name)
                 _uiState.value = _uiState.value.copy(webhooks = webhooks)
             } catch (_: Exception) {}
         }
     }
 
-    fun deleteWebhook(id: Int) {
+    fun deleteWebhook(webhook: Webhook) {
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             try {
-                userRepository.deleteWebhook(id)
-                val webhooks = userRepository.listWebhooks(user.id)
+                userRepository.deleteWebhook(webhook)
+                val webhooks = userRepository.listWebhooks(user.name)
                 _uiState.value = _uiState.value.copy(webhooks = webhooks)
             } catch (_: Exception) {}
         }

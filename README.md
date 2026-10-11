@@ -45,19 +45,17 @@
 - Center FAB for quick memo creation
 
 ### Server Compatibility
-- Compatible with Memos server **v0.24**, **v0.25**, and **v0.26**
+- Compatible with Memos server **v0.24**, **v0.25**, **v0.26**, and **v0.31**
 - Version-aware API handling — select your server version at login
 - Sign in with username/password **or** a Personal Access Token (works for
   OIDC/SSO users — generate a PAT from the Memos web UI)
 
 > [!IMPORTANT]
-> **Memos v0.27 and newer are not supported.** Upstream v0.27 introduced
-> breaking API changes (e.g. user resource names switched from `users/{id}`
-> to `users/{username}`, CEL filter semantics tightened, attachment
-> ownership enforcement) that this client does not adapt to. If your
-> server is on v0.27+, memos may not display correctly and attachments
-> may behave unexpectedly. Pin your Memos server to **v0.26.2** for the
-> best experience with this app.
+> **Memos v0.27–v0.30 are not supported.** These releases are bridged by
+> the v0.31 API changes this app adapts to, but each has its own API
+> surface that the app does not target directly. If your server is on
+> v0.27–v0.30, upgrade it to **v0.31** (or pin it to **v0.26.2**) for
+> the best experience with this app.
 
 ### Profile & Settings
 - User stats (memo count, tag count)

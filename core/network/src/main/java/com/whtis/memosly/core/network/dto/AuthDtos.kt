@@ -31,3 +31,13 @@ data class SessionResponse(
 data class GetCurrentUserResponse(
     val user: UserDto? = null,
 )
+
+/** v0.31: POST /api/v1/auth/refresh — empty body; the refresh token travels in a cookie. */
+@JsonClass(generateAdapter = true)
+class RefreshTokenV031Request
+
+@JsonClass(generateAdapter = true)
+data class RefreshTokenResponseV031(
+    val accessToken: String? = null,
+    val expiresAt: String? = null,
+)

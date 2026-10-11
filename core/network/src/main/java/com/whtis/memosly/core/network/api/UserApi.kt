@@ -1,7 +1,10 @@
 package com.whtis.memosly.core.network.api
 
 import com.whtis.memosly.core.network.dto.CreateAccessTokenRequest
+import com.whtis.memosly.core.network.dto.CreateAccessTokenV031Request
+import com.whtis.memosly.core.network.dto.CreateAccessTokenV031Response
 import com.whtis.memosly.core.network.dto.ListAccessTokensResponse
+import com.whtis.memosly.core.network.dto.ListPersonalAccessTokensResponseV031
 import com.whtis.memosly.core.network.dto.UpdateUserRequest
 import com.whtis.memosly.core.network.dto.UserDto
 import com.whtis.memosly.core.network.dto.UserStatsDto
@@ -85,6 +88,24 @@ interface UserApi {
 
     @DELETE("api/v1/users/{id}/personalAccessTokens/{token}")
     suspend fun deleteAccessTokenV026(
+        @Path("id") id: String,
+        @Path("token") token: String,
+    )
+
+    // v0.31: same paths as v0.26, but the payload lost the token secret and the
+    // rename fields, so the responses need their own types. Deleting addresses the
+    // token by the UUID id from its resource name, not by the secret.
+    @GET("api/v1/users/{id}/personalAccessTokens")
+    suspend fun listAccessTokensV031(@Path("id") id: String): ListPersonalAccessTokensResponseV031
+
+    @POST("api/v1/users/{id}/personalAccessTokens")
+    suspend fun createAccessTokenV031(
+        @Path("id") id: String,
+        @Body request: CreateAccessTokenV031Request,
+    ): CreateAccessTokenV031Response
+
+    @DELETE("api/v1/users/{id}/personalAccessTokens/{token}")
+    suspend fun deleteAccessTokenV031(
         @Path("id") id: String,
         @Path("token") token: String,
     )

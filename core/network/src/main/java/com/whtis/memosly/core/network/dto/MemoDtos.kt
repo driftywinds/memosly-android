@@ -26,12 +26,17 @@ data class MemoDto(
     val reactions: List<ReactionDto>? = null,
     val tags: List<String>? = null,
     val snippet: String? = null,
+    // v0.31: which space the memo belongs to ("spaces/{space}"), if any
+    val space: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class CreateMemoRequest(
     val content: String,
     val visibility: String? = null,
+    // v0.31: placement is per-memo; comments copy their parent's space so a SPACE
+    // comment stays where its context memo is.
+    val space: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -76,7 +81,7 @@ data class UpsertReactionRequest(
 
 @JsonClass(generateAdapter = true)
 data class ReactionFields(
-    val contentId: String,
+    val contentId: String? = null,
     val reactionType: String,
 )
 

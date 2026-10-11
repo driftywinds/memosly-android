@@ -25,6 +25,11 @@ class SessionPreferences @Inject constructor(
         get() = prefs.getString(KEY_ACCESS_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_ACCESS_TOKEN, value).apply()
 
+    /** v0.31: the `memos_refresh` cookie value; outlives the 15-minute access token. */
+    var refreshCookie: String?
+        get() = prefs.getString(KEY_REFRESH_COOKIE, null)
+        set(value) = prefs.edit().putString(KEY_REFRESH_COOKIE, value).apply()
+
     var userId: Int
         get() = prefs.getInt(KEY_USER_ID, 0)
         set(value) = prefs.edit().putInt(KEY_USER_ID, value).apply()
@@ -62,6 +67,7 @@ class SessionPreferences @Inject constructor(
     companion object {
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_ACCESS_TOKEN = "access_token"
+        private const val KEY_REFRESH_COOKIE = "refresh_cookie"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_NAV_MODE = "nav_mode"
         private const val KEY_SERVER_VERSION = "server_version"

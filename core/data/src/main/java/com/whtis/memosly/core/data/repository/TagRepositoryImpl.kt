@@ -20,11 +20,11 @@ class TagRepositoryImpl @Inject constructor(
     override suspend fun listTags(): List<Tag> {
         val user = authRepository.currentUser.value
             ?: throw IllegalStateException("Not authenticated")
-        val userId = user.id.toString()
+        // Stats are user-scoped by resource name — id on old servers, username on v0.31.
         val stats = when (version) {
-            ServerVersion.V024 -> userApi.getUserStats(userId)
-            // v0.25 + v0.26 both use :getStats
-            else -> userApi.getUserStatsV026(userId)
+            ServerVersion.V024 -> userApi.getUserStats(user.name.substringAfterLast("/"))
+            // v0.25 + v0.26 + v0.31 all use :getStats
+            else -> userApi.getUserStatsV026(user.name.substringAfterLast("/"))
         }
         return stats.tagCount?.entries?.map { (name, _) ->
             Tag(name = name, creator = user.name)

@@ -5,6 +5,35 @@ All notable changes to Memosly will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-11
+
+### Added
+- **Support for Memos server v0.31.** Select "v0.31" at login. v0.31
+  reworked most of the API this app talks to; the app now follows the
+  new surface end to end:
+  - **Sessions survive the new 15-minute access tokens.** v0.31 signs
+    you in with a short-lived JWT plus a 30-day rotating refresh
+    cookie. Memosly stores the cookie, renews the access token on
+    expiry (including after the app was closed overnight), and keeps
+    the rotation race-free across parallel requests.
+  - Comments copy their parent memo's visibility and space — v0.31
+    stopped inheriting it, and an unset visibility would make every
+    comment visible to its author alone.
+  - User-scoped calls (stats, access tokens, webhooks, notifications,
+    creator filters, creator names) use `users/{username}` resource
+    names; v0.31 dropped numeric user ids, which used to 404 or
+    silently match nothing.
+  - Notifications (`users/{user}/notifications`), personal access
+    tokens (no listed secret, delete by resource id), webhooks
+    (string ids, `displayName` title, nested create/delete),
+    identity providers (hyphenated path), and the admin instance
+    profile (`/instance/profile` replaces the removed workspace
+    profile) all follow the v0.31 shapes.
+  - v0.24–v0.26 servers behave exactly as before — every call site is
+    version-gated.
+- The About section of the profile shows which Memos server versions
+  the app currently supports.
+
 ## [1.2.1] - 2026-07-19
 
 ### Fixed
@@ -130,6 +159,7 @@ Initial open source release.
 - Compatible with Memos server **v0.24**, **v0.25**, and **v0.26**
   (version-aware API handling, selected at login).
 
+[1.3.0]: https://github.com/whtis/memosly-android/releases/tag/v1.3.0
 [1.2.1]: https://github.com/whtis/memosly-android/releases/tag/v1.2.1
 [1.2.0]: https://github.com/whtis/memosly-android/releases/tag/v1.2.0
 [1.1.2]: https://github.com/whtis/memosly-android/releases/tag/v1.1.2

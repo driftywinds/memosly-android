@@ -24,6 +24,8 @@ enum class Visibility {
     PRIVATE,
     PROTECTED,
     PUBLIC,
+    /** v0.31: readable only by members of the memo's space. */
+    SPACE,
     UNKNOWN,
 }
 

@@ -20,5 +20,7 @@ enum class InboxStatus {
 enum class InboxType {
     MEMO_COMMENT,
     VERSION_UPDATE,
+    /** v0.31: someone mentioned you in a memo or comment. */
+    MEMO_MENTION,
     UNKNOWN,
 }

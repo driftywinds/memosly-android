@@ -13,6 +13,10 @@ interface IdentityProviderApi {
     @GET("api/v1/identityProviders")
     suspend fun listIdentityProviders(): ListIdentityProvidersResponse
 
+    // v0.31: the path is hyphenated (the response shape is unchanged)
+    @GET("api/v1/identity-providers")
+    suspend fun listIdentityProvidersV031(): ListIdentityProvidersResponse
+
     @POST("api/v1/identityProviders")
     suspend fun createIdentityProvider(@Body provider: IdentityProviderDto): IdentityProviderDto
 

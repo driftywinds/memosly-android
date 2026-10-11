@@ -93,9 +93,10 @@ class ExploreViewModel @Inject constructor(
         if (unknown.isEmpty()) return
         viewModelScope.launch {
             for (creator in unknown.distinct()) {
-                val id = creator.substringAfterLast("/").toIntOrNull() ?: continue
                 try {
-                    val user = userRepository.getUser(id)
+                    // Creator is a `users/{user}` resource name; on v0.31 its segment
+                    // is a username, so it can no longer be parsed as an int id.
+                    val user = userRepository.getUser(creator)
                     _creatorNames.value = _creatorNames.value + (creator to user.nickname.ifBlank { user.username })
                 } catch (_: Exception) {
                     // Silently skip — will show fallback ID

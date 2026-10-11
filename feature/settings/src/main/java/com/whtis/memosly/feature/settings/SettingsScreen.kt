@@ -136,7 +136,7 @@ internal fun SettingsScreen(
                                     Text(text = webhook.name, style = MaterialTheme.typography.bodyMedium)
                                     Text(text = webhook.url, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                IconButton(onClick = { viewModel.deleteWebhook(webhook.id) }) {
+                                IconButton(onClick = { viewModel.deleteWebhook(webhook) }) {
                                     Icon(Icons.Default.Delete, contentDescription = stringResource(UiR.string.delete), tint = MaterialTheme.colorScheme.error)
                                 }
                             }

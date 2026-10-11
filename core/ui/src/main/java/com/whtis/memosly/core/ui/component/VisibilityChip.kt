@@ -19,6 +19,7 @@ fun VisibilityChip(
         Visibility.PUBLIC -> "Public" to MaterialTheme.colorScheme.primary
         Visibility.PROTECTED -> "Protected" to MaterialTheme.colorScheme.tertiary
         Visibility.PRIVATE -> "Private" to MaterialTheme.colorScheme.error
+        Visibility.SPACE -> "Space" to MaterialTheme.colorScheme.secondary
         Visibility.UNKNOWN -> "Unknown" to MaterialTheme.colorScheme.outline
     }
 

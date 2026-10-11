@@ -126,6 +126,7 @@
 
     <!-- About -->
     <string name="about">关于</string>
+    <string name="supported_memos_versions">支持的 Memos 服务器：%1$s</string>
     <string name="support_author">支持作者</string>
     <string name="support_author_desc">去 GitHub 点星、反馈或赞助</string>
     <string name="app_version">版本 %1$s</string>

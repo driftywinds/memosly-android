@@ -7,20 +7,28 @@
 - minSdk 26, targetSdk 35, compileSdk 35
 
 ## 多版本兼容（最重要）
-App 必须同时兼容 Memos server v0.24、v0.25、v0.26。
+App 必须同时兼容 Memos server v0.24、v0.25、v0.26、v0.31。
 - **任何 API 修改必须先确认目标服务器版本**
 - **修一个版本不能破坏其他版本** — 始终用版本分支逻辑
 - 版本检测存储在 `SessionPreferences.serverVersion`
+- v0.27–v0.30 没有单独适配（每版 API 面都不同），登录选择器里也没有它们的选项
 
 ### 已知版本差异
-| 功能 | v0.24/v0.25 | v0.26 |
-|------|-------------|-------|
-| 资源端点 | `api/v1/resources` | `api/v1/attachments` |
-| 用户统计 | `users/{id}/stats` | `users/{id}:getStats` |
-| 访问令牌 | `access_tokens` | `personalAccessTokens` |
-| MemoRelation | string/numeric | object/string enum |
-| 枚举序列化 | 数字 (1,2,3) | 字符串 ("NORMAL","ARCHIVED") |
-| 关联附件 | v0.24: `PATCH memos/{id}/resources`<br>v0.25: `PATCH memos/{id}/attachments` | `PATCH memos/{id}/attachments` |
+| 功能 | v0.24/v0.25 | v0.26 | v0.31 |
+|------|-------------|-------|-------|
+| 资源端点 | `api/v1/resources` | `api/v1/attachments` | `api/v1/attachments` |
+| 用户统计 | `users/{id}/stats` | `users/{id}:getStats` | `users/{id}:getStats` |
+| 访问令牌 | `access_tokens` | `personalAccessTokens` | `personalAccessTokens` |
+| MemoRelation | string/numeric | object/string enum | object/string enum |
+| 枚举序列化 | 数字 (1,2,3) | 字符串 ("NORMAL","ARCHIVED") | 字符串 |
+| 关联附件 | v0.24: `PATCH memos/{id}/resources`<br>v0.25: `PATCH memos/{id}/attachments` | `PATCH memos/{id}/attachments` | `PATCH memos/{id}/attachments` |
+| 用户资源名 | `users/{数字id}` | `users/{数字id}` | `users/{用户名}` |
+| 访问令牌有效期 | 长期 | 长期 | **15 分钟 JWT** + 30 天轮换刷新 Cookie |
+| 通知 | `api/v1/inboxes` | `api/v1/inboxes` | `api/v1/users/{user}/notifications` |
+| 实例信息 | `api/v1/workspace/profile` | `api/v1/workspace/profile` | `api/v1/instance/profile` |
+| 身份验证服务 | `api/v1/identityProviders` | `api/v1/identityProviders` | `api/v1/identity-providers` |
+| 评论可见性 | 继承父备忘 | 继承父备忘 | **不继承**（省略则 PRIVATE） |
+| Memo 归属空间 | 无 | 无 | `space` 字段 + `SPACE` 可见性 |
 
 **关联附件一律是 PATCH，不是 POST** —— proto 里绑的是 `patch:`，发 POST 会得到
 `501 Method Not Allowed`。这个错在 v0.24 上藏了很久（详见下方 2026-07-19 修复记录）。
@@ -158,6 +166,38 @@ ContentResolver.getType(uri)
   根本原因。现在会报错并留在编辑器；memo 此时已创建，所以 `memoId` 会被记下，重试走更新
   而不是再发一条。
 - 回归测试：`MemoApiAttachmentEndpointTest`（MockWebServer 钉住 method + path + body）。
+
+### 2026-10-11 适配（v1.3.0，v0.31 支持）
+对照 v0.31.0 tag 的 proto（`proto/api/v1/*.proto`）+ 本地实跑 memos v0.31.0 逐一验证。
+所有 v0.31 分支都用 `ServerVersion.V031` 隔离，v0.24–v0.26 行为不变。
+
+1. **认证换成短期令牌 + 轮换刷新 Cookie**（最容易踩的坑）：
+   - 登录响应里 `accessToken` 只活 **15 分钟**；同时下发 30 天的 `memos_refresh` HttpOnly cookie
+   - cookie 通过响应头 `Grpc-Metadata-Set-Cookie` 到达客户端；回传时**必须**用请求头
+     `Grpc-Metadata-Cookie: memos_refresh=...` —— 普通 `Cookie` 头会被 grpc-gateway 丢弃，
+     服务端一律回 `401 refresh token not found`
+   - 实现：`TokenAuthenticator`（OkHttp Authenticator，401 时自动刷新重放，单飞防轮换竞态）
+     + `TokenRefresher`（用独立的 plain OkHttpClient，避免递归进主 client）+
+     `SessionPreferences.refreshCookie` 持久化。`restoreSession` 遇到 401 会先尝试刷新再决定是否清 session
+2. **用户资源名从数字 id 变成用户名**（`users/tester`）：所有 user-scoped 调用（统计/PAT/webhook/通知/
+   创作者筛选/创作者名解析）改传 `users/{user}` 资源名，路径段取 `substringAfterLast("/")` ——
+   旧版本段落就是数字 id，新版本是用户名，同一套代码两边都对。用数字 id 打 v0.31 一律 404
+   （`users/0:getStats` → user not found），Home 的 `creator_id == 0` 筛选则**静默返回空列表**
+3. **评论不再继承父备忘可见性**（省略 → PRIVATE → 别人看不到）：V031 下先 `getMemo(parent)` 拿
+   visibility + space 再发评论，`CreateMemoRequest` 增加 `space` 字段
+4. **通知**：`api/v1/inboxes` 在 v0.31 不存在 → `api/v1/users/{user}/notifications`；
+   状态枚举**没有 READ**（只有 UNREAD/ARCHIVED），"标记已读"在 v0.31 是 no-op，ARCHIVED 才是真实迁移
+5. **PAT 列表不再含 token 明文**，字段改名 createdAt；删除用资源名里的 UUID 段。
+   `Webhook` 领域模型 id 改 String（v0.31 是 16 位 hex），删除走完整资源名；创建嵌套在用户下
+6. **实例信息**：`api/v1/workspace/profile` 被移除 → `api/v1/instance/profile`（无 owner/mode，
+   用 admin.username + demo 标志映射）。`identityProviders` 路径在 v0.31 变连字符 `identity-providers`
+7. **UserStats**：`memoDisplayTimestamps` 没了 → `totalMemoCount` + `memoCreatedTimestamps`；
+   领域模型加 `totalMemoCount`，旧版本按 timestamps.size 推导
+8. 不需要改的（实测）：memo CRUD、`state=ARCHIVED`、CEL 过滤器（`creator_id`、`tag in [...]`、
+   `visibility in [...]` 在 v0.31 仍然兼容）、reactions（contentId 字段被服务端宽容忽略，
+   id 仍是数字）、附件上传 `{filename,type,content}`、`/file/` 媒体路由（接受 Bearer）
+9. 回归测试：`V031EndpointTest`（MockWebServer 钉住 v0.31 的路径/请求体/头部）。
+   另外用本地实跑的 memos v0.31.0 走了一遍全部流程（登录/发文/附件/评论/反应/通知/PAT/webhook/刷新）
 
 ### 已知未解决问题
 - **v0.26 归档内容不可见**：归档标签页在 v0.24 正常，v0.26 看不到。可能与 v0.26 ListMemos API 的 state 过滤参数变化有关，需进一步调查。

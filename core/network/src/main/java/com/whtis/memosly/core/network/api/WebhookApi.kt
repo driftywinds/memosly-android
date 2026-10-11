@@ -1,8 +1,11 @@
 package com.whtis.memosly.core.network.api
 
 import com.whtis.memosly.core.network.dto.CreateWebhookRequest
+import com.whtis.memosly.core.network.dto.CreateWebhookV031Request
+import com.whtis.memosly.core.network.dto.ListUserWebhooksResponseV031
 import com.whtis.memosly.core.network.dto.ListWebhooksResponse
 import com.whtis.memosly.core.network.dto.WebhookDto
+import com.whtis.memosly.core.network.dto.WebhookDtoV031
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -31,4 +34,20 @@ interface WebhookApi {
 
     @DELETE("api/v1/webhooks/{id}")
     suspend fun deleteWebhook(@Path("id") id: Int)
+
+    // v0.31: webhooks are a user sub-resource with a string id and no top-level API
+    @GET("api/v1/users/{id}/webhooks")
+    suspend fun listWebhooksV031(@Path("id") id: String): ListUserWebhooksResponseV031
+
+    @POST("api/v1/users/{id}/webhooks")
+    suspend fun createWebhookV031(
+        @Path("id") id: String,
+        @Body request: CreateWebhookV031Request,
+    ): WebhookDtoV031
+
+    @DELETE("api/v1/users/{id}/webhooks/{webhookId}")
+    suspend fun deleteWebhookV031(
+        @Path("id") id: String,
+        @Path("webhookId") webhookId: String,
+    )
 }

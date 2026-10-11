@@ -95,8 +95,8 @@ class HomeViewModel @Inject constructor(
     ) { filter, archived, query, _ ->
         Triple(filter, archived, query)
     }.flatMapLatest { (filter, archived, query) ->
-        val userId = authRepository.currentUser.value?.id
-        val combinedFilter = buildFilter(filter, query, userId)
+        val user = authRepository.currentUser.value
+        val combinedFilter = buildFilter(filter, query, user)
         memoRepository.getMemosPaged(
             filter = combinedFilter,
             state = if (archived) "ARCHIVED" else null,
@@ -176,9 +176,10 @@ class HomeViewModel @Inject constructor(
         if (unknown.isEmpty()) return
         viewModelScope.launch {
             for (creator in unknown.distinct()) {
-                val id = creator.substringAfterLast("/").toIntOrNull() ?: continue
                 try {
-                    val user = userRepository.getUser(id)
+                    // Creator is a `users/{user}` resource name; on v0.31 its segment
+                    // is a username, so it can no longer be parsed as an int id.
+                    val user = userRepository.getUser(creator)
                     _creatorNames.value = _creatorNames.value +
                         (creator to user.nickname.ifBlank { user.username })
                 } catch (_: Exception) {}
@@ -268,9 +269,19 @@ class HomeViewModel @Inject constructor(
         _filter.value = if (parts.isEmpty()) null else parts.joinToString(" && ")
     }
 
-    private fun buildFilter(tagFilter: String?, searchQuery: String, userId: Int?): String? {
+    private fun buildFilter(tagFilter: String?, searchQuery: String, user: User?): String? {
         val parts = mutableListOf<String>()
-        userId?.let { parts.add("creator_id == $it") }
+        user?.let {
+            parts.add(
+                if (tokenManager.serverVersion.value == ServerVersion.V031) {
+                    // v0.31 user names are usernames, not numeric ids — `creator_id`
+                    // would compile but match nothing, leaving Home empty.
+                    "creator == \"${it.name.escapeCelStringLiteral()}\""
+                } else {
+                    "creator_id == ${it.id}"
+                }
+            )
+        }
         tagFilter?.let { parts.add(it) }
         if (searchQuery.isNotBlank()) {
             parts.add("content.contains(\"${searchQuery.escapeCelStringLiteral()}\")")

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
+import com.whtis.memosly.core.network.ServerVersion
 import com.whtis.memosly.core.network.SessionPreferences
 import com.whtis.memosly.core.ui.R as UiR
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -148,7 +150,7 @@ internal fun ProfileScreen(
                             Text(text = stringResource(UiR.string.statistics), style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = stringResource(UiR.string.total_memos, stats.memoDisplayTimestamps.size),
+                                text = stringResource(UiR.string.total_memos, stats.totalMemoCount),
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -233,7 +235,7 @@ internal fun ProfileScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                IconButton(onClick = { viewModel.deleteWebhook(webhook.id) }) {
+                                IconButton(onClick = { viewModel.deleteWebhook(webhook) }) {
                                     Icon(Icons.Default.Delete, contentDescription = stringResource(UiR.string.delete), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -279,6 +281,34 @@ internal fun ProfileScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // About - Supported memos server versions banner
+                    Surface(
+                        shape = MemosShapes.Card,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = stringResource(
+                                    UiR.string.supported_memos_versions,
+                                    ServerVersion.entries.joinToString(" \u00B7 ") { it.label },
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
                         }
                     }
 

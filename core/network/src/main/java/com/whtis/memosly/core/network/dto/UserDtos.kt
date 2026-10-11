@@ -27,9 +27,12 @@ data class UpdateUserRequest(
 
 @JsonClass(generateAdapter = true)
 data class UserStatsDto(
-    val memoDisplayTimestamps: List<String>?,
-    val memoTypeStats: Map<String, Int>?,
-    val tagCount: Map<String, Int>?,
+    val memoDisplayTimestamps: List<String>? = null,
+    val memoTypeStats: Map<String, Int>? = null,
+    val tagCount: Map<String, Int>? = null,
+    // v0.31: display timestamps are gone; created timestamps + an explicit count replace them.
+    val memoCreatedTimestamps: List<String>? = null,
+    val totalMemoCount: Int? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -63,4 +66,33 @@ data class AccessTokenDto(
     val description: String,
     val issuedAt: String,
     val expiresAt: String?,
+)
+
+// --- v0.31 personal access tokens ---
+// The list response never contains the token secret (it is shown once at creation),
+// and the resource name carries a UUID id used for deletion.
+
+@JsonClass(generateAdapter = true)
+data class PersonalAccessTokenDtoV031(
+    val name: String = "",
+    val description: String? = null,
+    val createdAt: String? = null,
+    val expiresAt: String? = null,
+    val lastUsedAt: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class ListPersonalAccessTokensResponseV031(
+    val personalAccessTokens: List<PersonalAccessTokenDtoV031> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateAccessTokenV031Request(
+    val description: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateAccessTokenV031Response(
+    val personalAccessToken: PersonalAccessTokenDtoV031? = null,
+    val token: String? = null,
 )

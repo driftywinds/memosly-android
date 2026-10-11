@@ -115,7 +115,13 @@ internal fun MemoEditorScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {
-                        Visibility.entries.filter { it != Visibility.UNKNOWN }.forEach { v ->
+                        // SPACE (v0.31) is only valid for a memo that belongs to a
+                        // space; offering it here would just get rejected on save.
+                        // A memo that is already SPACE keeps it until the user picks
+                        // something else.
+                        Visibility.entries
+                            .filter { it != Visibility.UNKNOWN && it != Visibility.SPACE }
+                            .forEach { v ->
                             DropdownMenuItem(
                                 text = { Text(v.name) },
                                 onClick = {

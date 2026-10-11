@@ -22,7 +22,9 @@ fun MemoDto.toDomain() = Memo(
     creator = creator,
     createTime = createTime,
     updateTime = updateTime,
-    displayTime = displayTime,
+    // v0.31 removed display_time; the memo list would render blank (and
+    // toLocalDateTime() would throw) without this fallback.
+    displayTime = displayTime.ifBlank { updateTime.ifBlank { createTime } },
     content = content,
     visibility = visibility.toVisibility(),
     state = state.toMemoState(),
@@ -76,19 +78,41 @@ fun AccessTokenDto.toDomain() = UserAccessToken(
     expiresAt = expiresAt ?: "",
 )
 
+fun PersonalAccessTokenDtoV031.toDomain() = UserAccessToken(
+    // The secret is never listed on v0.31; the resource-name id doubles as the
+    // delete key, which is all the UI needs this field for.
+    accessToken = name.substringAfterLast("/"),
+    description = description ?: "",
+    issuedAt = createdAt ?: "",
+    expiresAt = expiresAt ?: "",
+)
+
 fun UserStatsDto.toDomain() = UserStats(
     memoDisplayTimestamps = memoDisplayTimestamps ?: emptyList(),
     memoTypeStats = memoTypeStats ?: emptyMap(),
     tagCount = tagCount ?: emptyMap(),
+    totalMemoCount = totalMemoCount
+        ?: memoCreatedTimestamps?.size
+        ?: (memoDisplayTimestamps?.size ?: 0),
 )
 
 fun WebhookDto.toDomain() = Webhook(
-    id = id,
+    id = id.toString(),
     creatorId = creatorId,
     name = name,
     url = url,
     createTime = createTime,
     updateTime = updateTime,
+)
+
+fun WebhookDtoV031.toDomain() = Webhook(
+    id = name.substringAfterLast("/"),
+    creatorId = 0,
+    name = displayName ?: name.substringAfterLast("/"),
+    url = url,
+    createTime = createTime ?: "",
+    updateTime = updateTime ?: "",
+    resourceName = name,
 )
 
 fun InboxMessageDto.toDomain() = InboxMessage(
@@ -99,6 +123,25 @@ fun InboxMessageDto.toDomain() = InboxMessage(
     createTime = createTime,
     type = type.toInboxType(),
     activityId = activityId,
+)
+
+fun UserNotificationDtoV031.toDomain() = InboxMessage(
+    name = name,
+    sender = sender ?: "",
+    // v0.31 notifications carry no receiver; the list is per-user already.
+    receiver = "",
+    status = status.toInboxStatus(),
+    createTime = createTime ?: "",
+    type = type.toInboxType(),
+    activityId = null,
+)
+
+fun InstanceProfileDtoV031.toDomain() = WorkspaceProfile(
+    // v0.31 dropped `owner` and `mode`; the first admin and the demo flag stand in
+    // for what the old workspace profile reported.
+    owner = admin?.username ?: "",
+    version = version,
+    mode = if (demo) "demo" else "prod",
 )
 
 fun IdentityProviderDto.toDomain() = IdentityProvider(
@@ -147,6 +190,7 @@ private fun String.toVisibility(): Visibility = when (this) {
     "PRIVATE", "1" -> Visibility.PRIVATE
     "PROTECTED", "2" -> Visibility.PROTECTED
     "PUBLIC", "3" -> Visibility.PUBLIC
+    "SPACE", "4" -> Visibility.SPACE
     else -> Visibility.UNKNOWN
 }
 
@@ -156,7 +200,7 @@ private fun String.toMemoRelationType(): MemoRelationType = when (this) {
     else -> MemoRelationType.UNKNOWN
 }
 
-private fun String.toInboxStatus(): InboxStatus = when (this) {
+private fun String?.toInboxStatus(): InboxStatus = when (this) {
     "UNREAD" -> InboxStatus.UNREAD
     "READ" -> InboxStatus.READ
     "ARCHIVED" -> InboxStatus.ARCHIVED
@@ -166,6 +210,7 @@ private fun String.toInboxStatus(): InboxStatus = when (this) {
 private fun String?.toInboxType(): InboxType = when (this) {
     "MEMO_COMMENT" -> InboxType.MEMO_COMMENT
     "VERSION_UPDATE" -> InboxType.VERSION_UPDATE
+    "MEMO_MENTION" -> InboxType.MEMO_MENTION
     else -> InboxType.UNKNOWN
 }
 

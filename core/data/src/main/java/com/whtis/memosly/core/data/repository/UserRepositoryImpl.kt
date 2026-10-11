@@ -9,7 +9,9 @@ import com.whtis.memosly.core.network.TokenManager
 import com.whtis.memosly.core.network.api.UserApi
 import com.whtis.memosly.core.network.api.WebhookApi
 import com.whtis.memosly.core.network.dto.CreateAccessTokenRequest
+import com.whtis.memosly.core.network.dto.CreateAccessTokenV031Request
 import com.whtis.memosly.core.network.dto.CreateWebhookRequest
+import com.whtis.memosly.core.network.dto.CreateWebhookV031Request
 import com.whtis.memosly.core.network.dto.UpdateUserRequest
 import com.whtis.memosly.core.network.toDomain
 import javax.inject.Inject
@@ -25,17 +27,20 @@ class UserRepositoryImpl @Inject constructor(
     private val version: ServerVersion
         get() = tokenManager.serverVersion.value
 
-    override suspend fun getUser(id: Int): User =
-        userApi.getUser(id.toString()).toDomain()
+    /** Path segment of a `users/{user}` resource name — id on old servers, username on v0.31. */
+    private fun userSegment(name: String) = name.substringAfterLast("/")
+
+    override suspend fun getUser(name: String): User =
+        userApi.getUser(userSegment(name)).toDomain()
 
     override suspend fun updateUser(
-        id: Int,
+        name: String,
         nickname: String?,
         email: String?,
         avatarUrl: String?,
         description: String?,
     ): User = userApi.updateUser(
-        id.toString(),
+        userSegment(name),
         UpdateUserRequest(
             nickname = nickname,
             email = email,
@@ -44,46 +49,86 @@ class UserRepositoryImpl @Inject constructor(
         ),
     ).toDomain()
 
-    override suspend fun getUserStats(id: Int): UserStats =
+    override suspend fun getUserStats(name: String): UserStats =
         when (version) {
-            ServerVersion.V024 -> userApi.getUserStats(id.toString())
-            // v0.25 + v0.26 both use :getStats
-            else -> userApi.getUserStatsV026(id.toString())
+            ServerVersion.V024 -> userApi.getUserStats(userSegment(name))
+            // v0.25 + v0.26 + v0.31 all use :getStats
+            else -> userApi.getUserStatsV026(userSegment(name))
         }.toDomain()
 
-    override suspend fun listAccessTokens(id: Int): List<UserAccessToken> =
-        when (version) {
-            ServerVersion.V024 -> userApi.listAccessTokens(id.toString())
-            ServerVersion.V025 -> userApi.listAccessTokensV025(id.toString())
-            ServerVersion.V026 -> userApi.listAccessTokensV026(id.toString())
-        }.accessTokens.map { it.toDomain() }
-
-    override suspend fun createAccessToken(id: Int, description: String, expiresAt: String?) {
-        val req = CreateAccessTokenRequest(description, expiresAt)
-        when (version) {
-            ServerVersion.V024 -> userApi.createAccessToken(id.toString(), req)
-            ServerVersion.V025 -> userApi.createAccessTokenV025(id.toString(), req)
-            ServerVersion.V026 -> userApi.createAccessTokenV026(id.toString(), req)
+    override suspend fun listAccessTokens(name: String): List<UserAccessToken> {
+        val segment = userSegment(name)
+        return when (version) {
+            ServerVersion.V024 -> userApi.listAccessTokens(segment).accessTokens.map { it.toDomain() }
+            ServerVersion.V025 -> userApi.listAccessTokensV025(segment).accessTokens.map { it.toDomain() }
+            ServerVersion.V026 -> userApi.listAccessTokensV026(segment).accessTokens.map { it.toDomain() }
+            ServerVersion.V031 ->
+                userApi.listAccessTokensV031(segment).personalAccessTokens.map { it.toDomain() }
         }
     }
 
-    override suspend fun deleteAccessToken(id: Int, token: String) =
+    override suspend fun createAccessToken(name: String, description: String, expiresAt: String?) {
+        val segment = userSegment(name)
         when (version) {
-            ServerVersion.V024 -> userApi.deleteAccessToken(id.toString(), token)
-            ServerVersion.V025 -> userApi.deleteAccessTokenV025(id.toString(), token)
-            ServerVersion.V026 -> userApi.deleteAccessTokenV026(id.toString(), token)
+            ServerVersion.V024 ->
+                userApi.createAccessToken(segment, CreateAccessTokenRequest(description, expiresAt))
+            ServerVersion.V025 ->
+                userApi.createAccessTokenV025(segment, CreateAccessTokenRequest(description, expiresAt))
+            ServerVersion.V026 ->
+                userApi.createAccessTokenV026(segment, CreateAccessTokenRequest(description, expiresAt))
+            // v0.31 takes a lifetime in days, not an absolute expiry; null means no expiry.
+            ServerVersion.V031 ->
+                userApi.createAccessTokenV031(segment, CreateAccessTokenV031Request(description))
+        }
+    }
+
+    override suspend fun deleteAccessToken(name: String, token: String) {
+        val segment = userSegment(name)
+        when (version) {
+            ServerVersion.V024 -> userApi.deleteAccessToken(segment, token)
+            ServerVersion.V025 -> userApi.deleteAccessTokenV025(segment, token)
+            ServerVersion.V026 -> userApi.deleteAccessTokenV026(segment, token)
+            // On v0.31 `token` is the id segment from the resource name, not the secret.
+            ServerVersion.V031 -> userApi.deleteAccessTokenV031(segment, token)
+        }
+    }
+
+    override suspend fun listWebhooks(name: String): List<Webhook> {
+        val segment = userSegment(name)
+        return when (version) {
+            ServerVersion.V024 ->
+                webhookApi.listWebhooks("users/$segment").webhooks.map { it.toDomain() }
+            ServerVersion.V025, ServerVersion.V026 ->
+                webhookApi.listWebhooksV025(segment).webhooks.map { it.toDomain() }
+            ServerVersion.V031 ->
+                webhookApi.listWebhooksV031(segment).webhooks.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun createWebhook(owner: String, title: String, url: String): Webhook =
+        when (version) {
+            // The top-level endpoint exists up to v0.26; v0.31 nests creation under
+            // the user and renames the title field.
+            ServerVersion.V024, ServerVersion.V025, ServerVersion.V026 ->
+                webhookApi.createWebhook(CreateWebhookRequest(title, url)).toDomain()
+            ServerVersion.V031 ->
+                webhookApi.createWebhookV031(
+                    userSegment(owner),
+                    CreateWebhookV031Request(url = url, displayName = title),
+                ).toDomain()
         }
 
-    override suspend fun listWebhooks(creatorId: Int): List<Webhook> =
+    override suspend fun deleteWebhook(webhook: Webhook) {
         when (version) {
-            ServerVersion.V024 -> webhookApi.listWebhooks("users/$creatorId")
-            // v0.25 + v0.26: nested under user resource
-            else -> webhookApi.listWebhooksV025(creatorId.toString())
-        }.webhooks.map { it.toDomain() }
-
-    override suspend fun createWebhook(name: String, url: String): Webhook =
-        webhookApi.createWebhook(CreateWebhookRequest(name, url)).toDomain()
-
-    override suspend fun deleteWebhook(id: Int) =
-        webhookApi.deleteWebhook(id)
+            ServerVersion.V024, ServerVersion.V025, ServerVersion.V026 ->
+                webhookApi.deleteWebhook(webhook.id.toIntOrNull() ?: return)
+            // v0.31 addresses the webhook by its full resource name.
+            ServerVersion.V031 -> {
+                val parts = webhook.resourceName.split("/")
+                if (parts.size == 4 && parts[0] == "users" && parts[2] == "webhooks") {
+                    webhookApi.deleteWebhookV031(parts[1], parts[3])
+                }
+            }
+        }
+    }
 }
