@@ -199,5 +199,25 @@ ContentResolver.getType(uri)
 9. 回归测试：`V031EndpointTest`（MockWebServer 钉住 v0.31 的路径/请求体/头部）。
    另外用本地实跑的 memos v0.31.0 走了一遍全部流程（登录/发文/附件/评论/反应/通知/PAT/webhook/刷新）
 
+### 2026-10-11 修复（抽屉灰屏软死锁）
+**症状**：点击 Home 左上角汉堡菜单后偶发整屏纯灰、无任何控件、点击无响应，只能杀进程重启。
+高发路径：从子页面（Explore/通知/个人资料）点返回箭头回到 Home 后不久点汉堡。
+
+**根因**（Material3 `ModalNavigationDrawer` 的已知竞态，与服务端版本无关）：
+1. `drawerState.open()` 走 `MutatorMutex`——动画进行中再发一次 `open()`（双击，或在
+   NavHost 返回过渡尚未落定时点击）会取消在途动画，Compose layout 阶段可能永久停在
+   未解析状态：灰屏（scrim/窗口背景）、**无异常、无 logcat 输出**、输入被吞
+2. `rememberDrawerState` 底层是 `rememberSaveable`：点抽屉项导航离开时 Home 在关闭
+   动画中途被 dispose，saveable 保存的 DrawerValue 是 Open——返回时抽屉以"打开"状态
+   恢复，内容被滑出屏幕，只剩灰底
+
+**修复**（HomeScreen.kt）：
+- `remember { DrawerState(Closed) }` 替代 `rememberDrawerState`，杜绝跨导航恢复抽屉状态
+- 汉堡按钮：`SystemClock.elapsedRealtime()` 同步去抖（500ms）+ `isOpen/isAnimationRunning`
+  同步短路。**不能**用 `mutableStateOf` 布尔做守卫——状态写入批处理到下一帧，同一帧内
+  的两次点击都会读到 false
+- 导航类操作一律 `runAfterDrawerCloses { ... }`：先等抽屉关闭动画结束再 push 目标页面，
+  抽屉动画与 NavHost 过渡绝不重叠
+
 ### 已知未解决问题
 - **v0.26 归档内容不可见**：归档标签页在 v0.24 正常，v0.26 看不到。可能与 v0.26 ListMemos API 的 state 过滤参数变化有关，需进一步调查。

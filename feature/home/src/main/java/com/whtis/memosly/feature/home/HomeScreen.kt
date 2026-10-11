@@ -1,5 +1,6 @@
 package com.whtis.memosly.feature.home
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -36,11 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import com.whtis.memosly.core.model.Memo
 import com.whtis.memosly.core.model.Reaction
@@ -69,6 +72,9 @@ import com.whtis.memosly.core.ui.component.SidebarDestination
 import com.whtis.memosly.core.ui.component.ViewableMedia
 import com.whtis.memosly.core.ui.theme.MemosShapes
 import kotlinx.coroutines.launch
+
+/** Minimum gap between two attempts to open the drawer; see the guard note in [HomeScreen]. */
+private const val DRAWER_OPEN_DEBOUNCE_MS = 500L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,8 +99,55 @@ internal fun HomeScreen(
     val creatorNames by viewModel.creatorNames.collectAsStateWithLifecycle()
     val memos = viewModel.memos.collectAsLazyPagingItems()
     val scrollToTop by viewModel.scrollToTop.collectAsStateWithLifecycle()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    // Deliberately NOT rememberDrawerState: that is rememberSaveable, so a Home that
+    // is disposed while the drawer is still animating comes back from the back stack
+    // with the drawer restored OPEN — content slid off-screen behind a grey scrim.
+    val drawerState = remember { DrawerState(DrawerValue.Closed) }
     val scope = rememberCoroutineScope()
+    // Synchronous guard for opening the drawer. drawerState.open() mutates through a
+    // MutatorMutex: a second open() racing the first — a fast double tap, or a tap
+    // while the NavHost transition back to this screen is still settling — cancels the
+    // in-flight animation and can leave the layout phase permanently unresolved: a
+    // plain grey screen with no exception in logcat and input swallowed until the
+    // process is killed. The clock check is synchronous on purpose; a mutableStateOf
+    // guard is batched until the next frame, so both taps within one frame would read
+    // it as unset and launch two competing animations anyway.
+    val lastDrawerOpenAttempt = remember { mutableLongStateOf(0L) }
+    fun openDrawer() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastDrawerOpenAttempt.longValue < DRAWER_OPEN_DEBOUNCE_MS) return
+        if (drawerState.isOpen || drawerState.isAnimationRunning) return
+        lastDrawerOpenAttempt.longValue = now
+        scope.launch {
+            try {
+                drawerState.open()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A failed open() must not take the screen down with it.
+            }
+        }
+    }
+    // Drawer animations and NavHost transitions must not overlap (same deadlock as
+    // above): finish closing the drawer, then navigate. Navigating while the close
+    // animation is still running disposed Home mid-flight, which is also what fed
+    // the "drawer restored open on back navigation" state saved above.
+    fun runAfterDrawerCloses(action: () -> Unit) {
+        if (!drawerState.isOpen) {
+            action()
+            return
+        }
+        scope.launch {
+            try {
+                drawerState.close()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Being stuck inside the drawer would be worse than navigating anyway.
+            }
+            action()
+        }
+    }
     val listState = rememberLazyListState()
     var viewerMedia by remember { mutableStateOf<ViewableMedia?>(null) }
 
@@ -125,20 +178,20 @@ internal fun HomeScreen(
                 currentDestination = if (showArchived) SidebarDestination.Archived else SidebarDestination.Home,
                 userName = currentUser?.let { it.nickname.ifBlank { it.username } } ?: "",
                 onNavigate = { destination ->
-                    scope.launch { drawerState.close() }
-                    when (destination) {
-                        SidebarDestination.Home -> {
-                            if (showArchived) viewModel.toggleArchived()
+                    runAfterDrawerCloses {
+                        when (destination) {
+                            SidebarDestination.Home -> {
+                                if (showArchived) viewModel.toggleArchived()
+                            }
+                            SidebarDestination.Archived -> {
+                                if (!showArchived) viewModel.toggleArchived()
+                            }
+                            else -> onNavigate(destination)
                         }
-                        SidebarDestination.Archived -> {
-                            if (!showArchived) viewModel.toggleArchived()
-                        }
-                        else -> onNavigate(destination)
                     }
                 },
                 onProfileClick = {
-                    scope.launch { drawerState.close() }
-                    onProfileClick()
+                    runAfterDrawerCloses { onProfileClick() }
                 },
             )
         },
@@ -150,7 +203,7 @@ internal fun HomeScreen(
                 TopAppBar(
                     title = { Text(if (showArchived) stringResource(UiR.string.show_archived) else stringResource(UiR.string.app_name)) },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        IconButton(onClick = { openDrawer() }) {
                             Icon(Icons.Default.Menu, contentDescription = stringResource(UiR.string.menu))
                         }
                     },
